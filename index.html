@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="theme-color" content="#0f0f0f" />
+<title>Timestamp Camera</title>
+<link rel="manifest" href="manifest.json" />
+<link rel="apple-touch-icon" href="icons/icon-192.png" />
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <div id="app">
+
+    <!-- Camera view -->
+    <div id="camera-screen" class="screen active">
+      <video id="video" autoplay playsinline muted></video>
+      <canvas id="overlay-canvas"></canvas>
+
+      <div id="top-bar">
+        <button id="flip-btn" class="icon-btn" title="Switch camera">⟳</button>
+        <div id="location-status">📍 Locating…</div>
+        <button id="flash-btn" class="icon-btn" title="Toggle stamp">🏷️</button>
+      </div>
+
+      <div id="bottom-bar">
+        <button id="gallery-btn" class="icon-btn" title="Saved photos">🖼️</button>
+        <button id="shutter-btn" title="Capture"></button>
+        <button id="settings-btn" class="icon-btn" title="Settings">⚙️</button>
+      </div>
+    </div>
+
+    <!-- Preview after capture -->
+    <div id="preview-screen" class="screen">
+      <img id="preview-img" alt="Captured photo" />
+      <div id="preview-bar">
+        <button id="discard-btn" class="text-btn">Retake</button>
+        <button id="save-btn" class="text-btn primary">Save</button>
+      </div>
+    </div>
+
+    <!-- Gallery -->
+    <div id="gallery-screen" class="screen">
+      <div id="gallery-header">
+        <button id="gallery-back-btn" class="icon-btn">←</button>
+        <h2>Saved Photos</h2>
+      </div>
+      <div id="gallery-grid"></div>
+      <p id="gallery-empty" class="hint">No photos yet. Take one!</p>
+    </div>
+
+    <!-- Settings -->
+    <div id="settings-screen" class="screen">
+      <div id="gallery-header">
+        <button id="settings-back-btn" class="icon-btn">←</button>
+        <h2>Settings</h2>
+      </div>
+      <div class="settings-list">
+        <label class="setting-row">
+          <span>Show date &amp; time</span>
+          <input type="checkbox" id="toggle-datetime" checked />
+        </label>
+        <label class="setting-row">
+          <span>Show location</span>
+          <input type="checkbox" id="toggle-location" checked />
+        </label>
+        <label class="setting-row">
+          <span>Show custom label</span>
+          <input type="checkbox" id="toggle-label" />
+        </label>
+        <label class="setting-row column">
+          <span>Custom label text</span>
+          <input type="text" id="custom-label-input" placeholder="e.g. Site Visit #1" maxlength="40" />
+        </label>
+        <label class="setting-row column">
+          <span>Stamp position</span>
+          <select id="position-select">
+            <option value="bottom-left">Bottom left</option>
+            <option value="bottom-right">Bottom right</option>
+            <option value="top-left">Top left</option>
+            <option value="top-right">Top right</option>
+          </select>
+        </label>
+        <label class="setting-row column">
+          <span>Text size</span>
+          <input type="range" id="fontsize-range" min="14" max="40" value="22" />
+        </label>
+        <label class="setting-row column">
+          <span>Date format</span>
+          <select id="dateformat-select">
+            <option value="dmy">DD/MM/YYYY</option>
+            <option value="mdy">MM/DD/YYYY</option>
+            <option value="ymd">YYYY-MM-DD</option>
+          </select>
+        </label>
+      </div>
+      <p class="hint">All photos stay on your device. Nothing is uploaded anywhere.</p>
+    </div>
+
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
