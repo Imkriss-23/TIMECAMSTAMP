@@ -11,9 +11,15 @@ const state = {
     customLabel: '',
     position: 'bottom-left',
     fontSize: 22,
-    dateFormat: 'dmy'
+    dateFormat: 'dmy',
+    timerDuration: 3
   },
-  lastCaptureDataUrl: null
+  lastCaptureDataUrl: null,
+  locationStampOn: true,
+  gridOn: false,
+  flashMode: 'off', // 'off' | 'on' | 'torch'
+  timerOn: false,
+  torchTrack: null
 };
 
 const DB_NAME = 'timestamp-camera-db';
@@ -23,7 +29,11 @@ const STORE_NAME = 'photos';
 const video = document.getElementById('video');
 const overlayCanvas = document.getElementById('overlay-canvas');
 const overlayCtx = overlayCanvas.getContext('2d');
+const gridCanvas = document.getElementById('grid-canvas');
+const gridCtx = gridCanvas.getContext('2d');
 const locationStatus = document.getElementById('location-status');
+const lastThumb = document.getElementById('last-thumb');
+const timerCountdownEl = document.getElementById('timer-countdown');
 
 const screens = {
   camera: document.getElementById('camera-screen'),
@@ -75,6 +85,7 @@ function loadSettings() {
     const raw = localStorage.getItem('tsc-settings');
     if (raw) Object.assign(state.settings, JSON.parse(raw));
   } catch (e) { /* ignore */ }
+  state.locationStampOn = state.settings.showLocation;
   syncSettingsUI();
 }
 function saveSettings() {
@@ -88,6 +99,8 @@ function syncSettingsUI() {
   document.getElementById('position-select').value = state.settings.position;
   document.getElementById('fontsize-range').value = state.settings.fontSize;
   document.getElementById('dateformat-select').value = state.settings.dateFormat;
+  document.getElementById('timer-duration-select').value = state.settings.timerDuration;
+  locationToggleBtn.classList.toggle('active', state.locationStampOn);
 }
 
 // ---------- Camera ----------
@@ -101,9 +114,22 @@ async function startCamera() {
       audio: false
     });
     video.srcObject = state.stream;
+    const track = state.stream.getVideoTracks()[0];
+    state.torchTrack = track || null;
+    // Re-apply torch if flash was set to "on" before switching cameras
+    if (state.flashMode === 'torch') applyTorch(true);
   } catch (err) {
     alert('Camera access failed: ' + err.message);
   }
+}
+
+async function applyTorch(on) {
+  if (!state.torchTrack) return;
+  const caps = state.torchTrack.getCapabilities ? state.torchTrack.getCapabilities() : {};
+  if (!caps.torch) return;
+  try {
+    await state.torchTrack.applyConstraints({ advanced: [{ torch: on }] });
+  } catch (e) { /* not all devices support this */ }
 }
 
 document.getElementById('flip-btn').addEventListener('click', () => {
@@ -144,6 +170,105 @@ async function reverseGeocode(lat, lon) {
   } catch (e) { /* offline or blocked — lat/lon fallback already shown */ }
 }
 
+// ---------- Top toolbar: location toggle, timer, flash, grid ----------
+const locationToggleBtn = document.getElementById('location-toggle-btn');
+const timerBtn = document.getElementById('timer-btn');
+const flashBtn = document.getElementById('flash-btn');
+const gridBtn = document.getElementById('grid-btn');
+
+locationToggleBtn.addEventListener('click', () => {
+  state.locationStampOn = !state.locationStampOn;
+  state.settings.showLocation = state.locationStampOn;
+  saveSettings();
+  locationToggleBtn.classList.toggle('active', state.locationStampOn);
+  syncSettingsUI();
+});
+
+timerBtn.addEventListener('click', () => {
+  state.timerOn = !state.timerOn;
+  timerBtn.classList.toggle('active', state.timerOn);
+});
+
+const flashCycle = ['off', 'on', 'torch'];
+const flashIcons = { off: '⚡', on: '⚡', torch: '🔦' };
+flashBtn.addEventListener('click', async () => {
+  const idx = flashCycle.indexOf(state.flashMode);
+  state.flashMode = flashCycle[(idx + 1) % flashCycle.length];
+  flashBtn.textContent = flashIcons[state.flashMode];
+  flashBtn.classList.toggle('active', state.flashMode !== 'off');
+  if (state.flashMode === 'torch') {
+    await applyTorch(true);
+  } else {
+    await applyTorch(false);
+  }
+});
+
+gridBtn.addEventListener('click', () => {
+  state.gridOn = !state.gridOn;
+  gridBtn.classList.toggle('active', state.gridOn);
+  drawGrid();
+});
+
+function drawGrid() {
+  gridCanvas.width = gridCanvas.clientWidth;
+  gridCanvas.height = gridCanvas.clientHeight;
+  gridCtx.clearRect(0, 0, gridCanvas.width, gridCanvas.height);
+  if (!state.gridOn) return;
+  const w = gridCanvas.width, h = gridCanvas.height;
+  gridCtx.strokeStyle = 'rgba(255,255,255,0.4)';
+  gridCtx.lineWidth = 1;
+  for (let i = 1; i < 3; i++) {
+    const x = (w / 3) * i;
+    gridCtx.beginPath(); gridCtx.moveTo(x, 0); gridCtx.lineTo(x, h); gridCtx.stroke();
+    const y = (h / 3) * i;
+    gridCtx.beginPath(); gridCtx.moveTo(0, y); gridCtx.lineTo(w, y); gridCtx.stroke();
+  }
+}
+window.addEventListener('resize', drawGrid);
+
+function runShutterFlashEffect() {
+  if (state.flashMode !== 'on') return;
+  const flash = document.createElement('div');
+  flash.style.cssText = 'position:fixed;inset:0;background:#fff;z-index:9999;opacity:0.85;pointer-events:none;';
+  document.body.appendChild(flash);
+  requestAnimationFrame(() => {
+    flash.style.transition = 'opacity 200ms ease-out';
+    flash.style.opacity = '0';
+    setTimeout(() => flash.remove(), 220);
+  });
+}
+
+function waitForTimer() {
+  return new Promise(resolve => {
+    if (!state.timerOn) return resolve();
+    let remaining = state.settings.timerDuration;
+    timerCountdownEl.classList.remove('hidden');
+    timerCountdownEl.textContent = remaining;
+    const iv = setInterval(() => {
+      remaining--;
+      if (remaining <= 0) {
+        clearInterval(iv);
+        timerCountdownEl.classList.add('hidden');
+        resolve();
+      } else {
+        timerCountdownEl.textContent = remaining;
+      }
+    }, 1000);
+  });
+}
+
+// ---------- Mode tabs (Photo / Video) ----------
+document.getElementById('mode-photo').addEventListener('click', () => setMode('photo'));
+document.getElementById('mode-video').addEventListener('click', () => setMode('video'));
+function setMode(mode) {
+  document.getElementById('mode-photo').classList.toggle('active', mode === 'photo');
+  document.getElementById('mode-video').classList.toggle('active', mode === 'video');
+  if (mode === 'video') {
+    alert('Video mode is coming soon — this version captures timestamped photos.');
+    setMode('photo');
+  }
+}
+
 // ---------- Stamp text building ----------
 function formatDate(d) {
   const dd = String(d.getDate()).padStart(2, '0');
@@ -162,40 +287,90 @@ function formatTime(d) {
   h = h % 12 || 12;
   return `${h}:${m} ${ampm}`;
 }
+function getTimezoneLabel() {
+  try {
+    const offsetMin = -new Date().getTimezoneOffset();
+    const sign = offsetMin >= 0 ? '+' : '-';
+    const abs = Math.abs(offsetMin);
+    const hh = String(Math.floor(abs / 60)).padStart(2, '0');
+    const mm = String(abs % 60).padStart(2, '0');
+    return `GMT${sign}${hh}:${mm}`;
+  } catch (e) { return ''; }
+}
+
 function buildStampLines() {
   const lines = [];
   const now = new Date();
+
   if (state.settings.showDatetime) {
-    lines.push(`${formatDate(now)}  ${formatTime(now)}`);
+    lines.push(`${formatDate(now)}  ${formatTime(now)}  ${getTimezoneLabel()}`);
   }
+
   if (state.settings.showLocation) {
     if (state.placeName) lines.push(state.placeName);
-    else if (state.coords) lines.push(`${state.coords.lat.toFixed(5)}, ${state.coords.lon.toFixed(5)}`);
-    else lines.push('Location unavailable');
+    else if (state.coords) lines.push('Location unavailable');
+
+    if (state.coords) {
+      const latDir = state.coords.lat >= 0 ? 'N' : 'S';
+      const lonDir = state.coords.lon >= 0 ? 'E' : 'W';
+      lines.push(`${Math.abs(state.coords.lat).toFixed(5)}°${latDir}, ${Math.abs(state.coords.lon).toFixed(5)}°${lonDir}`);
+    } else if (!state.placeName) {
+      lines.push('Location unavailable');
+    }
   }
+
   if (state.settings.showLabel && state.settings.customLabel.trim()) {
     lines.push(state.settings.customLabel.trim());
   }
   return lines;
 }
 
+function wrapLine(ctx, text, maxWidth) {
+  const words = text.split(' ');
+  const wrapped = [];
+  let current = '';
+  for (const word of words) {
+    const test = current ? current + ' ' + word : word;
+    if (ctx.measureText(test).width > maxWidth && current) {
+      wrapped.push(current);
+      current = word;
+    } else {
+      current = test;
+    }
+  }
+  if (current) wrapped.push(current);
+  return wrapped;
+}
+
 function drawStamp(ctx, canvasW, canvasH) {
-  const lines = buildStampLines();
-  if (lines.length === 0) return;
+  const rawLines = buildStampLines();
+  if (rawLines.length === 0) return;
 
   const fontSize = Math.round((state.settings.fontSize / 400) * canvasW) || state.settings.fontSize;
   const padding = fontSize * 0.6;
   const lineHeight = fontSize * 1.35;
+  const margin = fontSize * 0.8;
+  const maxBoxW = canvasW - margin * 2;
+  const maxTextW = maxBoxW - padding * 2;
 
   ctx.font = `600 ${fontSize}px -apple-system, Roboto, sans-serif`;
   ctx.textBaseline = 'bottom';
 
+  // Wrap any line that's too wide for the frame
+  const lines = [];
+  rawLines.forEach(l => {
+    if (ctx.measureText(l).width > maxTextW) {
+      lines.push(...wrapLine(ctx, l, maxTextW));
+    } else {
+      lines.push(l);
+    }
+  });
+
   const widths = lines.map(l => ctx.measureText(l).width);
-  const boxW = Math.max(...widths) + padding * 2;
+  const boxW = Math.min(Math.max(...widths) + padding * 2, maxBoxW);
   const boxH = lines.length * lineHeight + padding * 1.2;
 
   let x, y;
-  const margin = fontSize * 0.8;
   const pos = state.settings.position;
   if (pos.includes('right')) x = canvasW - boxW - margin;
   else x = margin;
@@ -238,7 +413,9 @@ function renderLiveOverlay() {
 }
 
 // ---------- Capture ----------
-document.getElementById('shutter-btn').addEventListener('click', () => {
+document.getElementById('shutter-btn').addEventListener('click', async () => {
+  await waitForTimer();
+
   const w = video.videoWidth;
   const h = video.videoHeight;
   if (!w || !h) return;
@@ -257,6 +434,7 @@ document.getElementById('shutter-btn').addEventListener('click', () => {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
 
   drawStamp(ctx, w, h);
+  runShutterFlashEffect();
 
   state.lastCaptureDataUrl = canvas.toDataURL('image/jpeg', 0.92);
   document.getElementById('preview-img').src = state.lastCaptureDataUrl;
@@ -271,9 +449,15 @@ document.getElementById('discard-btn').addEventListener('click', () => {
 document.getElementById('save-btn').addEventListener('click', async () => {
   if (!state.lastCaptureDataUrl) return;
   await savePhoto(state.lastCaptureDataUrl);
+  setLastThumb(state.lastCaptureDataUrl);
   state.lastCaptureDataUrl = null;
   showScreen('camera');
 });
+
+function setLastThumb(dataUrl) {
+  lastThumb.src = dataUrl;
+  lastThumb.classList.add('has-photo');
+}
 
 // ---------- Gallery ----------
 document.getElementById('gallery-btn').addEventListener('click', async () => {
@@ -311,7 +495,10 @@ document.getElementById('toggle-datetime').addEventListener('change', e => {
   state.settings.showDatetime = e.target.checked; saveSettings();
 });
 document.getElementById('toggle-location').addEventListener('change', e => {
-  state.settings.showLocation = e.target.checked; saveSettings();
+  state.settings.showLocation = e.target.checked;
+  state.locationStampOn = e.target.checked;
+  locationToggleBtn.classList.toggle('active', state.locationStampOn);
+  saveSettings();
 });
 document.getElementById('toggle-label').addEventListener('change', e => {
   state.settings.showLabel = e.target.checked; saveSettings();
@@ -328,12 +515,23 @@ document.getElementById('fontsize-range').addEventListener('input', e => {
 document.getElementById('dateformat-select').addEventListener('change', e => {
   state.settings.dateFormat = e.target.value; saveSettings();
 });
+document.getElementById('timer-duration-select').addEventListener('change', e => {
+  state.settings.timerDuration = Number(e.target.value); saveSettings();
+});
 
 // ---------- Init ----------
+async function initThumb() {
+  const photos = await getAllPhotos();
+  if (photos.length) setLastThumb(photos[0].dataUrl);
+}
+
 loadSettings();
+locationToggleBtn.classList.toggle('active', state.locationStampOn);
 startCamera();
 startLocationWatch();
 renderLiveOverlay();
+drawGrid();
+initThumb();
 
 // Register service worker for installability / offline use
 if ('serviceWorker' in navigator) {
