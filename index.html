@@ -16,18 +16,34 @@
     <!-- Camera view -->
     <div id="camera-screen" class="screen active">
       <video id="video" autoplay playsinline muted></video>
+      <canvas id="grid-canvas"></canvas>
       <canvas id="overlay-canvas"></canvas>
 
-      <div id="top-bar">
-        <button id="flip-btn" class="icon-btn" title="Switch camera">⟳</button>
-        <div id="location-status">📍 Locating…</div>
-        <button id="flash-btn" class="icon-btn" title="Toggle stamp">🏷️</button>
+      <div id="status-line">
+        <span id="location-status">📍 Locating…</span>
       </div>
 
-      <div id="bottom-bar">
-        <button id="gallery-btn" class="icon-btn" title="Saved photos">🖼️</button>
-        <button id="shutter-btn" title="Capture"></button>
+      <div id="top-toolbar">
+        <button id="location-toggle-btn" class="icon-btn active" title="Location stamp">📍</button>
+        <button id="timer-btn" class="icon-btn" title="Self-timer">⏱️</button>
+        <button id="flash-btn" class="icon-btn" title="Flash">⚡</button>
+        <button id="grid-btn" class="icon-btn" title="Grid lines">▦</button>
         <button id="settings-btn" class="icon-btn" title="Settings">⚙️</button>
+      </div>
+
+      <div id="mode-tabs">
+        <button class="mode-tab active" id="mode-photo">PHOTO</button>
+        <button class="mode-tab" id="mode-video">VIDEO</button>
+      </div>
+
+      <div id="timer-countdown" class="hidden"></div>
+
+      <div id="bottom-bar">
+        <button id="gallery-btn" class="thumb-btn" title="Saved photos">
+          <img id="last-thumb" alt="" />
+        </button>
+        <button id="shutter-btn" title="Capture"></button>
+        <button id="flip-btn" class="icon-btn" title="Switch camera">🔄</button>
       </div>
     </div>
 
@@ -92,6 +108,14 @@
             <option value="dmy">DD/MM/YYYY</option>
             <option value="mdy">MM/DD/YYYY</option>
             <option value="ymd">YYYY-MM-DD</option>
+          </select>
+        </label>
+        <label class="setting-row column">
+          <span>Self-timer duration</span>
+          <select id="timer-duration-select">
+            <option value="3">3 seconds</option>
+            <option value="5">5 seconds</option>
+            <option value="10">10 seconds</option>
           </select>
         </label>
       </div>
